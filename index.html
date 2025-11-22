@@ -1,0 +1,1332 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Wifi, Volume2, Battery, User, X, Minus, Square, ChevronRight, Folder, FileText, Image, Film, Music, Download, Trash2, Globe, Chrome, Monitor, Settings, Power, Calendar, Mail, Calculator, Camera, Plus, ChevronLeft, Home, Star, Clock, Zap, Activity, WifiOff, Edit, Palette, MousePointer } from 'lucide-react';
+
+// ============================================
+// WEBSOCKET PARA MULTIPLAYER REAL
+// ============================================
+class MultiplayerManager {
+  constructor() {
+    this.players = new Map();
+    this.myId = Math.random().toString(36).substr(2, 9);
+    this.callbacks = new Set();
+  }
+
+  connect() {
+    // Simulação de broadcast local (em produção use WebSocket/Socket.io)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'players') {
+        this.updatePlayers(JSON.parse(e.newValue || '[]'));
+      }
+    });
+    
+    setInterval(() => this.broadcastPosition(), 50);
+  }
+
+  broadcastPosition() {
+    const players = this.getPlayers();
+    localStorage.setItem('players', JSON.stringify(players));
+  }
+
+  updatePosition(x, y) {
+    const myPlayer = this.players.get(this.myId);
+    if (myPlayer) {
+      myPlayer.x = x;
+      myPlayer.y = y;
+      myPlayer.lastUpdate = Date.now();
+    }
+  }
+
+  addPlayer(name, color) {
+    this.players.set(this.myId, {
+      id: this.myId,
+      name,
+      color,
+      x: 0,
+      y: 0,
+      lastUpdate: Date.now()
+    });
+  }
+
+  getPlayers() {
+    const now = Date.now();
+    const active = [];
+    this.players.forEach(player => {
+      if (now - player.lastUpdate < 5000) {
+        active.push(player);
+      }
+    });
+    return active;
+  }
+
+  updatePlayers(remotePlayers) {
+    remotePlayers.forEach(remote => {
+      if (remote.id !== this.myId) {
+        this.players.set(remote.id, remote);
+      }
+    });
+    this.callbacks.forEach(cb => cb(this.getPlayers()));
+  }
+
+  onChange(callback) {
+    this.callbacks.add(callback);
+  }
+}
+
+// ============================================
+// SISTEMA DE ARQUIVOS COMPLETO
+// ============================================
+const fileSystem = {
+  'Este Computador': {
+    type: 'root',
+    items: {
+      Desktop: {
+        type: 'folder',
+        items: {
+          'Fotos de Viagem': { type: 'folder', items: {
+            'praia.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800' },
+            'montanha.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800' },
+            'por-do-sol.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1495567720989-cebdbdd97913?w=800' }
+          }},
+          'Trabalho': { type: 'folder', items: {
+            'relatorio.txt': { type: 'text', content: 'Relatório Q4 2024\n\nVendas: +35%\nMeta atingida!\n\nPalavra secreta: BANANA\n\nPróxima reunião: 15/12' },
+            'projetos.txt': { type: 'text', content: 'Projetos 2025:\n- Site novo\n- App mobile\n- Dashboard\n\nCódigo secreto: LARANJA' }
+          }},
+          'Jogos': { type: 'folder', items: {
+            'minecraft.exe': { type: 'file', content: 'Jogo não instalado' }
+          }},
+          'notas.txt': { type: 'text', content: 'Lembrete: comprar leite\nSenha wifi: gato123\nAniversário da Maria: 20/11' }
+        }
+      },
+      Documents: {
+        type: 'folder',
+        items: {
+          'Receitas': { type: 'folder', items: {
+            'bolo.txt': { type: 'text', content: 'Bolo de chocolate\n2 ovos\n1 xícara de açúcar\n2 xícaras de farinha\nPalavra escondida: MORANGO' },
+            'pizza.txt': { type: 'text', content: 'Pizza caseira\nMassa, molho, queijo' }
+          }},
+          'Faculdade': { type: 'folder', items: {
+            'matematica.pdf': { type: 'file', content: 'PDF de matemática' },
+            'historia.txt': { type: 'text', content: 'Resumo de História\nSegunda Guerra Mundial\nCódigo: UVA' }
+          }},
+          'curriculum.txt': { type: 'text', content: 'Meu Currículo\n\nNome: João Silva\nIdade: 25\nProfissão: Dev' }
+        }
+      },
+      Downloads: {
+        type: 'folder',
+        items: {
+          'video_engraçado.mp4': { type: 'video', content: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400' },
+          'musica.mp3': { type: 'audio', content: 'Audio file' },
+          'instalador.exe': { type: 'file', content: 'Instalador' },
+          'foto_legal.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=800' }
+        }
+      },
+      Pictures: {
+        type: 'folder',
+        items: {
+          'wallpaper1.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920' },
+          'wallpaper2.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?w=1920' },
+          'wallpaper3.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920' },
+          'familia.jpg': { type: 'image', content: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=800' },
+          'Screenshots': { type: 'folder', items: {
+            'tela1.png': { type: 'image', content: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800' }
+          }}
+        }
+      },
+      Music: {
+        type: 'folder',
+        items: {
+          'playlist.mp3': { type: 'audio', content: 'Música' }
+        }
+      },
+      Videos: {
+        type: 'folder',
+        items: {
+          'filme.mp4': { type: 'video', content: 'Vídeo' }
+        }
+      }
+    }
+  }
+};
+
+// FASES DO JOGO
+const phases = [
+  {
+    phase: 1,
+    time: 600,
+    objectsNeeded: 6,
+    objects: [
+      { id: 1, name: 'Palavra "BANANA"', location: 'Desktop/Trabalho/relatorio.txt', hint: 'Está em um relatório de trabalho' },
+      { id: 2, name: 'Foto de praia', location: 'Desktop/Fotos de Viagem/praia.jpg', hint: 'Desktop > Fotos de Viagem' },
+      { id: 3, name: 'Senha do wifi', location: 'Desktop/notas.txt', hint: 'Leia as notas no Desktop' },
+      { id: 4, name: 'Pesquisa "python"', location: 'browser:google:python', hint: 'Pesquise no Google' },
+      { id: 5, name: 'Receita de bolo', location: 'Documents/Receitas/bolo.txt', hint: 'Documentos > Receitas' },
+      { id: 6, name: 'Wallpaper 1', location: 'Pictures/wallpaper1.jpg', hint: 'Pasta Pictures' },
+      { id: 7, name: 'Vídeo engraçado', location: 'Downloads/video_engraçado.mp4', hint: 'Olhe nos Downloads' },
+      { id: 8, name: 'Foto de montanha', location: 'Desktop/Fotos de Viagem/montanha.jpg', hint: 'Outra foto de viagem' }
+    ]
+  }
+];
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
+export default function DesktopHunt() {
+  const [isLocked, setIsLocked] = useState(true);
+  const [password, setPassword] = useState('');
+  const [showPasswordHint, setShowPasswordHint] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [gameStarted, setGameStarted] = useState(false);
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(600);
+  const [foundObjects, setFoundObjects] = useState([]);
+  const [openWindows, setOpenWindows] = useState([]);
+  const [currentPath, setCurrentPath] = useState(['Este Computador', 'Desktop']);
+  const [players, setPlayers] = useState([]);
+  const [showStartMenu, setShowStartMenu] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState({
+    playerName: 'Jogador',
+    cursorColor: '#3B82F6',
+    wallpaper: 'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?w=1920'
+  });
+  const multiplayerRef = useRef(null);
+
+  // Inicializar multiplayer
+  useEffect(() => {
+    const mp = new MultiplayerManager();
+    mp.connect();
+    mp.addPlayer(settings.playerName, settings.cursorColor);
+    mp.onChange(setPlayers);
+    multiplayerRef.current = mp;
+  }, []);
+
+  // Atualizar nome e cor do jogador
+  useEffect(() => {
+    if (multiplayerRef.current) {
+      multiplayerRef.current.addPlayer(settings.playerName, settings.cursorColor);
+    }
+  }, [settings.playerName, settings.cursorColor]);
+
+  // Atualizar relógio
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Timer do jogo
+  useEffect(() => {
+    if (gameStarted && timeLeft > 0) {
+      const timer = setInterval(() => setTimeLeft(t => t - 1), 1000);
+      return () => clearInterval(timer);
+    }
+    if (timeLeft === 0) {
+      addNotification('⏰ Tempo Esgotado!', 'O jogo terminou!');
+    }
+  }, [gameStarted, timeLeft]);
+
+  // Rastrear mouse para multiplayer
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (multiplayerRef.current) {
+        multiplayerRef.current.updatePosition(e.clientX, e.clientY);
+      }
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Simular perda de conexão
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Math.random() > 0.98) {
+        setIsOnline(false);
+        addNotification('🔴 Sem Internet', 'Você ficou offline!');
+        setTimeout(() => {
+          setIsOnline(true);
+          addNotification('🟢 Conectado', 'Internet restaurada!');
+        }, 5000);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const addNotification = (title, message) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, title, message }]);
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  };
+
+  const handleLogin = () => {
+    if (password.toLowerCase() === 'se divirta!' || password.toLowerCase() === 'se divirta') {
+      setIsLocked(false);
+      setGameStarted(true);
+      addNotification('🎮 Jogo Iniciado!', 'Encontre os objetos antes do tempo acabar!');
+    } else {
+      setShowPasswordHint(true);
+    }
+  };
+
+  const openWindow = (type, title, content, extra = {}) => {
+    const newWindow = { 
+      id: Date.now(), 
+      type, 
+      title, 
+      content, 
+      minimized: false,
+      x: 100 + openWindows.length * 30,
+      y: 80 + openWindows.length * 30,
+      ...extra
+    };
+    setOpenWindows(prev => [...prev, newWindow]);
+  };
+
+  const closeWindow = (id) => {
+    setOpenWindows(prev => prev.filter(w => w.id !== id));
+  };
+
+  const minimizeWindow = (id) => {
+    setOpenWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: true } : w));
+  };
+
+  const getCurrentFolder = () => {
+    let current = fileSystem;
+    for (let i = 0; i < currentPath.length; i++) {
+      if (current[currentPath[i]]) {
+        current = current[currentPath[i]].items || current[currentPath[i]];
+      }
+    }
+    return current;
+  };
+
+  const openFile = (fileName, fileData) => {
+    if (fileData.type === 'text') {
+      openWindow('notepad', fileName, fileData.content);
+      checkFoundObject(`${currentPath.slice(1).join('/')}/${fileName}`);
+    } else if (fileData.type === 'image') {
+      openWindow('image', fileName, fileData.content);
+      checkFoundObject(`${currentPath.slice(1).join('/')}/${fileName}`);
+    } else if (fileData.type === 'folder') {
+      setCurrentPath([...currentPath, fileName]);
+    } else if (fileData.type === 'video') {
+      openWindow('video', fileName, fileData.content);
+      checkFoundObject(`${currentPath.slice(1).join('/')}/${fileName}`);
+    }
+  };
+
+  const checkFoundObject = (location) => {
+    const phase = phases[currentPhase];
+    const obj = phase.objects.find(o => o.location === location && !foundObjects.includes(o.id));
+    if (obj) {
+      setFoundObjects(prev => [...prev, obj.id]);
+      addNotification('✅ Objeto Encontrado!', obj.name);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const changeWallpaper = (url) => {
+    setSettings(prev => ({ ...prev, wallpaper: url }));
+    addNotification('🖼️ Papel de Parede', 'Alterado com sucesso!');
+  };
+
+  // TELA DE BLOQUEIO
+  if (isLocked) {
+    return (
+      <div 
+        className="fixed inset-0 flex flex-col items-center justify-center"
+        style={{
+          backgroundImage: 'url(https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+        
+        <div className="relative z-10 text-center mb-8">
+          <div className="w-40 h-40 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center mx-auto mb-6 border-4 border-white/30">
+            <User className="w-20 h-20 text-white" />
+          </div>
+          <h2 className="text-4xl font-light text-white mb-2">{settings.playerName}</h2>
+        </div>
+
+        <div className="relative z-10 w-96">
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
+            placeholder="Senha"
+            className="w-full px-6 py-4 bg-white/20 backdrop-blur-md border-2 border-white/30 rounded-lg text-white placeholder-white/60 text-center text-xl focus:outline-none focus:border-white/50 focus:bg-white/30"
+          />
+          
+          {showPasswordHint && (
+            <div className="mt-4 p-4 bg-red-500/90 backdrop-blur-sm rounded-lg text-white text-sm flex items-start gap-3 animate-in slide-in-from-top">
+              <div className="text-2xl">⚠️</div>
+              <div>
+                <div className="font-bold mb-1">Senha incorreta</div>
+                <div>Dica: "se divirta!"</div>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleLogin}
+            className="mt-4 w-full py-4 bg-blue-500/80 backdrop-blur-md border-2 border-blue-400/50 rounded-lg text-white font-semibold text-lg hover:bg-blue-600/80 transition-all"
+          >
+            Entrar →
+          </button>
+        </div>
+
+        <div className="absolute bottom-10 right-10 text-white/80 text-lg font-light">
+          <div className="text-5xl mb-2">{currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div>{currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const phase = phases[currentPhase];
+  const progress = (foundObjects.length / phase.objectsNeeded) * 100;
+
+  return (
+    <div 
+      className="fixed inset-0 overflow-hidden"
+      style={{
+        backgroundImage: `url(${settings.wallpaper})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    >
+      {/* NOTIFICAÇÕES */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {notifications.map(notif => (
+          <div key={notif.id} className="bg-gray-900/95 backdrop-blur-sm text-white p-4 rounded-lg shadow-2xl border border-gray-700 animate-in slide-in-from-right w-80">
+            <div className="font-bold mb-1">{notif.title}</div>
+            <div className="text-sm text-gray-300">{notif.message}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* CURSORES MULTIPLAYER */}
+      {players.map(player => (
+        <div
+          key={player.id}
+          className="fixed pointer-events-none z-40 transition-all duration-100"
+          style={{ left: player.x, top: player.y, transform: 'translate(-2px, -2px)' }}
+        >
+          <svg width="28" height="28" viewBox="0 0 24 24" fill={player.color} className="drop-shadow-lg filter drop-shadow-[0_0_3px_rgba(0,0,0,0.5)]">
+            <path d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" stroke="white" strokeWidth="2"/>
+          </svg>
+          <div 
+            className="ml-7 -mt-5 px-2 py-1 rounded-md text-xs font-bold whitespace-nowrap shadow-lg" 
+            style={{ backgroundColor: player.color, color: 'white' }}
+          >
+            {player.name}
+          </div>
+        </div>
+      ))}
+
+      {/* MENU INICIAR */}
+      {showStartMenu && (
+        <div className="absolute bottom-14 left-0 w-[680px] h-[650px] bg-gray-900/98 backdrop-blur-xl rounded-tr-xl shadow-2xl z-40 border-t border-r border-gray-700/50">
+          <div className="p-6 h-full flex flex-col">
+            <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700">
+              <div 
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+                style={{ backgroundColor: settings.cursorColor }}
+              >
+                {settings.playerName[0].toUpperCase()}
+              </div>
+              <div>
+                <div className="text-white font-semibold text-xl">{settings.playerName}</div>
+                <div className="text-gray-400 text-sm">jogador@desktop.com</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 flex-1 overflow-y-auto">
+              <MenuTile icon={<Chrome />} label="Google Chrome" color="bg-gradient-to-br from-blue-500 to-blue-600" onClick={() => { openWindow('browser', 'Google Chrome', ''); setShowStartMenu(false); }} />
+              <MenuTile icon={<Folder />} label="Explorador" color="bg-gradient-to-br from-yellow-500 to-yellow-600" onClick={() => { openWindow('explorer', 'Explorador de Arquivos', ''); setShowStartMenu(false); }} />
+              <MenuTile icon={<FileText />} label="Notepad" color="bg-gradient-to-br from-blue-400 to-blue-500" onClick={() => { openWindow('notepad', 'Bloco de Notas - Sem título', 'Digite algo...'); setShowStartMenu(false); }} />
+              <MenuTile icon={<Calculator />} label="Calculadora" color="bg-gradient-to-br from-purple-500 to-purple-600" onClick={() => { openWindow('calculator', 'Calculadora', ''); setShowStartMenu(false); }} />
+              <MenuTile icon={<Calendar />} label="Calendário" color="bg-gradient-to-br from-red-500 to-red-600" onClick={() => { openWindow('calendar', 'Calendário', ''); setShowStartMenu(false); }} />
+              <MenuTile icon={<Mail />} label="Email" color="bg-gradient-to-br from-blue-600 to-blue-700" onClick={() => { openWindow('email', 'Email - Caixa de Entrada', ''); setShowStartMenu(false); }} />
+              <MenuTile icon={<Camera />} label="Câmera" color="bg-gradient-to-br from-green-500 to-green-600" onClick={() => addNotification('📷 Câmera', 'Câmera não disponível')} />
+              <MenuTile icon={<Settings />} label="Configurações" color="bg-gradient-to-br from-gray-600 to-gray-700" onClick={() => { setShowSettings(true); setShowStartMenu(false); }} />
+              <MenuTile icon={<Power />} label="Desligar" color="bg-gradient-to-br from-red-600 to-red-700" onClick={() => { setIsLocked(true); setShowStartMenu(false); }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIGURAÇÕES */}
+      {showSettings && (
+        <SettingsWindow 
+          settings={settings}
+          onClose={() => setShowSettings(false)}
+          onSave={(newSettings) => {
+            setSettings(newSettings);
+            addNotification('⚙️ Configurações', 'Salvo com sucesso!');
+            setShowSettings(false);
+          }}
+          onChangeWallpaper={changeWallpaper}
+        />
+      )}
+
+      {/* BARRA DE TAREFAS */}
+      <div className="absolute bottom-0 left-0 right-0 h-12 bg-[#1a1a1a]/98 backdrop-blur-md flex items-center px-2 z-30 border-t border-gray-800/50 shadow-2xl">
+        <button 
+          onClick={() => setShowStartMenu(!showStartMenu)}
+          className="w-12 h-10 flex items-center justify-center hover:bg-white/10 rounded transition-colors group"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="3" width="8" height="8" fill="#00D8FF" className="group-hover:fill-blue-400 transition-colors"/>
+            <rect x="13" y="3" width="8" height="8" fill="#00D8FF" className="group-hover:fill-blue-400 transition-colors"/>
+            <rect x="3" y="13" width="8" height="8" fill="#00D8FF" className="group-hover:fill-blue-400 transition-colors"/>
+            <rect x="13" y="13" width="8" height="8" fill="#00D8FF" className="group-hover:fill-blue-400 transition-colors"/>
+          </svg>
+        </button>
+
+        <div className="w-px h-8 bg-gray-700 mx-1"></div>
+
+        <div className="flex-1 flex items-center gap-1 mx-2 overflow-x-auto">
+          {openWindows.filter(w => !w.minimized).map(win => (
+            <button
+              key={win.id}
+              className="px-4 h-10 bg-gray-800/80 hover:bg-gray-700/80 rounded flex items-center gap-2 text-white text-sm max-w-52 flex-shrink-0 border border-gray-700/50 transition-all"
+            >
+              <WindowIcon type={win.type} />
+              <span className="truncate">{win.title}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-4 text-white text-xs px-3">
+          <ChevronLeft className="w-4 h-4 opacity-50" />
+          {isOnline ? <Wifi className="w-4 h-4 hover:text-blue-400 cursor-pointer transition-colors" /> : <WifiOff className="w-4 h-4 text-red-400" />}
+          <Volume2 className="w-4 h-4 hover:text-blue-400 cursor-pointer transition-colors" />
+          <Battery className="w-4 h-4 hover:text-blue-400 cursor-pointer transition-colors" />
+          <div className="text-right pl-2 border-l border-gray-700">
+            <div className="font-medium">{currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div className="text-gray-400 text-[10px]">{currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ÍCONES DO DESKTOP */}
+      <div className="absolute top-4 left-4 grid gap-3">
+        <DesktopIcon icon={<Monitor />} label="Este Computador" onClick={() => { setCurrentPath(['Este Computador']); openWindow('explorer', 'Este Computador', ''); }} />
+        <DesktopIcon icon={<Trash2 />} label="Lixeira" onClick={() => addNotification('🗑️ Lixeira', 'Lixeira vazia')} />
+        <DesktopIcon icon={<Chrome />} label="Google Chrome" onClick={() => openWindow('browser', 'Google Chrome', '')} />
+        <DesktopIcon icon={<Folder />} label="Documentos" onClick={() => { setCurrentPath(['Este Computador', 'Documents']); openWindow('explorer', 'Documentos', ''); }} />
+        <DesktopIcon icon={<Image />} label="Imagens" onClick={() => { setCurrentPath(['Este Computador', 'Pictures']); openWindow('explorer', 'Imagens', ''); }} />
+      </div>
+
+      {/* PAINEL DO JOGO */}
+      <GamePanel 
+        phase={phase}
+        currentPhase={currentPhase}
+        timeLeft={timeLeft}
+        foundObjects={foundObjects}
+        progress={progress}
+        formatTime={formatTime}
+        players={players}
+      />
+
+      {/* JANELAS */}
+      {openWindows.filter(w => !w.minimized).map(win => (
+        <Window 
+          key={win.id} 
+          window={win} 
+          onClose={() => closeWindow(win.id)}
+          onMinimize={() => minimizeWindow(win.id)}
+        >
+          {win.type === 'image' && <ImageViewer src={win.content} />}
+          {win.type === 'video' && <VideoPlayer src={win.content} />}
+          {win.type === 'calculator' && <CalculatorReal />}
+          {win.type === 'calendar' && <CalendarApp />}
+          {win.type === 'email' && <EmailApp playerName={settings.playerName} />}
+        </Window>
+      ))}
+    </div>
+  );
+}
+
+// ============================================
+// COMPONENTES UI
+// ============================================
+function DesktopIcon({ icon, label, onClick }) {
+  return (
+    <button 
+      onClick={onClick} 
+      className="w-24 flex flex-col items-center gap-2 p-2 hover:bg-white/20 rounded-lg group transition-all"
+    >
+      <div className="w-14 h-14 text-white drop-shadow-2xl group-hover:scale-110 transition-transform">{icon}</div>
+      <span className="text-white text-xs text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] font-medium bg-black/40 px-2 py-1 rounded backdrop-blur-sm">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function MenuTile({ icon, label, color, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`${color} rounded-xl p-5 hover:scale-105 active:scale-95 transition-all shadow-xl flex flex-col items-center justify-center gap-2 text-white`}
+    >
+      <div className="w-10 h-10">{icon}</div>
+      <span className="text-xs font-semibold text-center">{label}</span>
+    </button>
+  );
+}
+
+function WindowIcon({ type }) {
+  const icons = {
+    browser: <Chrome className="w-4 h-4 text-blue-400" />,
+    notepad: <FileText className="w-4 h-4 text-blue-300" />,
+    explorer: <Folder className="w-4 h-4 text-yellow-400" />,
+    image: <Image className="w-4 h-4 text-green-400" />,
+    calculator: <Calculator className="w-4 h-4 text-purple-400" />,
+    calendar: <Calendar className="w-4 h-4 text-red-400" />,
+    email: <Mail className="w-4 h-4 text-blue-500" />
+  };
+  return icons[type] || <FileText className="w-4 h-4" />;
+}
+
+function Window({ window, onClose, onMinimize, children }) {
+  return (
+    <div 
+      className="absolute bg-white rounded-lg shadow-2xl flex flex-col overflow-hidden z-20 border border-gray-300/50"
+      style={{ 
+        top: window.y || 100, 
+        left: window.x || 200, 
+        width: '920px', 
+        height: '680px',
+        maxWidth: 'calc(100vw - 100px)',
+        maxHeight: 'calc(100vh - 150px)'
+      }}
+    >
+      <div className="h-10 bg-white border-b border-gray-200 flex items-center px-3 justify-between cursor-move hover:bg-gray-50 transition-colors">
+        <div className="flex items-center gap-3 flex-1">
+          <WindowIcon type={window.type} />
+          <span className="text-sm font-medium truncate text-gray-800">{window.title}</span>
+        </div>
+        <div className="flex gap-1">
+          <button 
+            onClick={onMinimize}
+            className="w-12 h-8 hover:bg-gray-200 flex items-center justify-center rounded transition-colors"
+          >
+            <Minus className="w-4 h-4 text-gray-700" />
+          </button>
+          <button 
+            className="w-12 h-8 hover:bg-gray-200 flex items-center justify-center rounded transition-colors"
+          >
+            <Square className="w-3 h-3 text-gray-700" />
+          </button>
+          <button 
+            onClick={onClose}
+            className="w-12 h-8 hover:bg-red-500 hover:text-white flex items-center justify-center rounded transition-colors group"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto bg-white">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function GamePanel({ phase, currentPhase, timeLeft, foundObjects, progress, formatTime, players }) {
+  return (
+    <div className="absolute top-4 right-4 w-[400px] bg-gradient-to-br from-gray-900/98 to-gray-800/98 backdrop-blur-xl rounded-2xl p-5 text-white border border-gray-700/50 shadow-2xl">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Zap className="w-6 h-6 text-yellow-400" />
+          FASE {currentPhase + 1}
+        </h2>
+        <div className="px-3 py-1 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full text-xs font-bold shadow-lg">
+          {foundObjects.length}/{phase.objectsNeeded}
+        </div>
+      </div>
+      
+      <div className="mb-4 p-3 bg-red-900/30 rounded-lg border border-red-700/50">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-semibold flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            Tempo:
+          </span>
+          <span className={`font-mono font-bold text-lg ${timeLeft < 60 ? 'text-red-300 animate-pulse' : 'text-green-300'}`}>
+            {formatTime(timeLeft)}
+          </span>
+        </div>
+        <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 transition-all" style={{ width: `${(timeLeft / phase.time) * 100}%` }}></div>
+        </div>
+      </div>
+
+      <div className="mb-4 p-3 bg-blue-900/30 rounded-lg border border-blue-700/50">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4" />
+            Progresso:
+          </span>
+          <span className="font-bold">{Math.round(progress)}%</span>
+        </div>
+        <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 transition-all shadow-lg" style={{ width: `${progress}%` }}></div>
+        </div>
+      </div>
+
+      <div className="mb-4 p-3 bg-green-900/30 rounded-lg border border-green-700/50">
+        <div className="flex items-center gap-2 text-sm">
+          <MousePointer className="w-4 h-4 text-green-400" />
+          <span className="font-semibold">Jogadores Online: {players.length}</span>
+        </div>
+      </div>
+
+      <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2 sticky top-0 bg-gray-800/95 py-2 rounded">
+          <Star className="w-3 h-3" />
+          Objetos para Encontrar:
+        </h3>
+        {phase.objects.slice(0, phase.objectsNeeded).map(obj => (
+          <div 
+            key={obj.id} 
+            className={`p-3 rounded-lg flex items-center gap-3 transition-all ${
+              foundObjects.includes(obj.id) 
+                ? 'bg-green-900/50 border border-green-700/50 scale-95' 
+                : 'bg-gray-800/70 border border-gray-700/50 hover:bg-gray-700/70 hover:border-gray-600'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+              foundObjects.includes(obj.id) 
+                ? 'bg-green-500 border-green-400 scale-110 shadow-lg shadow-green-500/50' 
+                : 'border-gray-600'
+            }`}>
+              {foundObjects.includes(obj.id) && <span className="text-white font-bold text-sm">✓</span>}
+            </div>
+            <span className={`text-sm ${foundObjects.includes(obj.id) ? 'line-through text-gray-500' : ''}`}>
+              {obj.name}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {foundObjects.length >= phase.objectsNeeded && (
+        <div className="mt-4 p-4 bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl text-center animate-bounce shadow-xl">
+          <div className="text-3xl mb-2">🎉</div>
+          <div className="font-bold text-lg">PARABÉNS!</div>
+          <div className="text-sm">Você completou a fase!</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// NAVEGADOR REAL
+// ============================================
+function BrowserReal({ onSearch, isOnline }) {
+  const [url, setUrl] = useState('');
+  const [currentPage, setCurrentPage] = useState('home');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showDinoGame, setShowDinoGame] = useState(false);
+
+  const handleSearch = () => {
+    if (!isOnline) {
+      setShowDinoGame(true);
+      return;
+    }
+    if (url) {
+      setCurrentPage('results');
+      // Simular busca real do Google
+      setSearchResults([
+        { title: `${url} - Wikipedia`, url: `https://pt.wikipedia.org/wiki/${url}`, desc: `${url} é um termo que se refere a... (Wikipedia)` },
+        { title: `Tudo sobre ${url}`, url: `https://www.${url}.com`, desc: `Site oficial sobre ${url}. Informações completas e atualizadas.` },
+        { title: `Como aprender ${url} - Tutorial Completo`, url: `https://tutorial.com/${url}`, desc: `Guia completo para iniciantes sobre ${url}.` },
+        { title: `${url} - Notícias e Atualizações`, url: `https://noticias.com/${url}`, desc: `Últimas notícias sobre ${url}.` }
+      ]);
+      onSearch(`browser:google:${url}`);
+    }
+  };
+
+  if (showDinoGame) {
+    return <DinoGame onClose={() => setShowDinoGame(false)} />;
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-3 bg-gray-100 border-b flex items-center gap-3">
+        <ChevronLeft className="w-5 h-5 text-gray-400 cursor-pointer hover:text-gray-600" onClick={() => setCurrentPage('home')} />
+        <ChevronRight className="w-5 h-5 text-gray-300" />
+        <button className="p-1.5 hover:bg-gray-200 rounded-full transition-colors">
+          <Home className="w-4 h-4 text-gray-600" />
+        </button>
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          placeholder="Pesquisar no Google ou digite um URL"
+          className="flex-1 px-5 py-2.5 border border-gray-300 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+        />
+        <button 
+          onClick={handleSearch} 
+          className="px-6 py-2.5 bg-blue-500 text-white rounded-full text-sm font-medium hover:bg-blue-600 transition-colors shadow-sm"
+        >
+          Buscar
+        </button>
+      </div>
+      
+      <div className="flex-1 overflow-auto bg-white">
+        {currentPage === 'home' ? (
+          <div className="flex flex-col items-center justify-center h-full">
+            <svg className="w-32 h-32 mb-8" viewBox="0 0 272 92">
+              <text x="10" y="70" fontFamily="Arial" fontSize="80" fill="#4285F4">G</text>
+              <text x="70" y="70" fontFamily="Arial" fontSize="80" fill="#EA4335">o</text>
+              <text x="120" y="70" fontFamily="Arial" fontSize="80" fill="#FBBC04">o</text>
+              <text x="170" y="70" fontFamily="Arial" fontSize="80" fill="#4285F4">g</text>
+              <text x="210" y="70" fontFamily="Arial" fontSize="80" fill="#34A853">l</text>
+              <text x="240" y="70" fontFamily="Arial" fontSize="80" fill="#EA4335">e</text>
+            </svg>
+            <p className="text-gray-500 text-lg">Pesquise qualquer coisa</p>
+          </div>
+        ) : (
+          <div className="p-8">
+            <div className="max-w-3xl">
+              <div className="text-sm text-gray-600 mb-2">Aproximadamente 1.250.000 resultados (0,42 segundos)</div>
+              <div className="space-y-6">
+                {searchResults.map((result, i) => (
+                  <div key={i} className="group">
+                    <div className="flex items-start gap-3 mb-1">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                        <Globe className="w-4 h-4 text-gray-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm text-gray-600 mb-1">{result.url}</div>
+                        <a href="#" className="text-xl text-blue-700 hover:underline font-medium">{result.title}</a>
+                        <p className="text-sm text-gray-700 mt-1 leading-relaxed">{result.desc}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// JOGO DO DINOSSAURO
+function DinoGame({ onClose }) {
+  const [score, setScore] = useState(0);
+  const [gameStarted, setGameStarted] = useState(false);
+
+  useEffect(() => {
+    if (gameStarted) {
+      const interval = setInterval(() => setScore(s => s + 1), 100);
+      return () => clearInterval(interval);
+    }
+  }, [gameStarted]);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full bg-white">
+      <button onClick={onClose} className="absolute top-4 right-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+        Voltar Online
+      </button>
+      <div className="text-center mb-8">
+        <WifiOff className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Sem conexão com a internet</h2>
+        <p className="text-gray-600">Pressione ESPAÇO para jogar</p>
+      </div>
+      <div className="text-4xl mb-8">🦖</div>
+      <div className="text-2xl font-mono mb-4">Pontuação: {score}</div>
+      <button
+        onClick={() => setGameStarted(true)}
+        className="px-8 py-3 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600"
+      >
+        {gameStarted ? 'Jogando...' : 'Iniciar Jogo'}
+      </button>
+    </div>
+  );
+}
+
+// ============================================
+// OUTROS APLICATIVOS
+// ============================================
+function Notepad({ content }) {
+  const [text, setText] = useState(content || '');
+  
+  return (
+    <div className="h-full flex flex-col">
+      <div className="p-2 bg-gray-50 border-b flex gap-2 text-sm text-gray-700">
+        <button className="px-3 py-1 hover:bg-gray-200 rounded transition-colors">Arquivo</button>
+        <button className="px-3 py-1 hover:bg-gray-200 rounded transition-colors">Editar</button>
+        <button className="px-3 py-1 hover:bg-gray-200 rounded transition-colors">Formatar</button>
+        <button className="px-3 py-1 hover:bg-gray-200 rounded transition-colors">Exibir</button>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="flex-1 p-5 font-mono text-sm resize-none focus:outline-none"
+        style={{ fontFamily: 'Consolas, Courier New, monospace' }}
+        placeholder="Digite algo..."
+      />
+    </div>
+  );
+}
+
+function FileExplorer({ path, files, onOpen, onBack, onNavigate }) {
+  const quickAccess = [
+    { name: 'Desktop', icon: <Monitor className="w-4 h-4" />, path: ['Este Computador', 'Desktop'] },
+    { name: 'Documentos', icon: <FileText className="w-4 h-4" />, path: ['Este Computador', 'Documents'] },
+    { name: 'Downloads', icon: <Download className="w-4 h-4" />, path: ['Este Computador', 'Downloads'] },
+    { name: 'Imagens', icon: <Image className="w-4 h-4" />, path: ['Este Computador', 'Pictures'] },
+    { name: 'Músicas', icon: <Music className="w-4 h-4" />, path: ['Este Computador', 'Music'] },
+    { name: 'Vídeos', icon: <Film className="w-4 h-4" />, path: ['Este Computador', 'Videos'] }
+  ];
+
+  return (
+    <div className="flex h-full">
+      <div className="w-56 bg-gray-50 border-r p-3 space-y-1">
+        <div className="text-xs font-bold text-gray-500 uppercase mb-3 px-2">Acesso Rápido</div>
+        {quickAccess.map((item, i) => (
+          <button
+            key={i}
+            onClick={() => onNavigate(item.path)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-blue-50 rounded-lg text-sm text-left transition-colors group"
+          >
+            <div className="text-gray-600 group-hover:text-blue-600">{item.icon}</div>
+            <span className="text-gray-700 group-hover:text-blue-700 font-medium">{item.name}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        <div className="p-2 bg-gray-50 border-b flex items-center gap-2">
+          <button 
+            onClick={onBack} 
+            disabled={path.length <= 1}
+            className="p-2 hover:bg-gray-200 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <button className="p-2 hover:bg-gray-200 rounded transition-colors opacity-50">
+            <ChevronRight className="w-5 h-5" />
+          </button>
+          <div className="flex-1 px-4 py-2 bg-white border rounded-lg text-sm flex items-center gap-2 shadow-sm">
+            <Folder className="w-4 h-4 text-yellow-600" />
+            <span className="text-gray-700">{path.join(' > ')}</span>
+          </div>
+          <button className="p-2 hover:bg-gray-200 rounded transition-colors">
+            <Search className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+        
+        <div className="flex-1 p-5 grid grid-cols-6 gap-4 content-start overflow-auto bg-white">
+          {Object.entries(files).length === 0 ? (
+            <div className="col-span-6 text-center py-20 text-gray-400">
+              <Folder className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <p>Esta pasta está vazia</p>
+            </div>
+          ) : (
+            Object.entries(files).map(([name, data]) => (
+              <button
+                key={name}
+                onClick={() => onOpen(name, data)}
+                className="flex flex-col items-center gap-2 p-3 hover:bg-blue-50 rounded-xl group transition-all"
+              >
+                {data.type === 'folder' && <Folder className="w-16 h-16 text-yellow-500 group-hover:scale-110 transition-transform" />}
+                {data.type === 'text' && <FileText className="w-16 h-16 text-blue-500 group-hover:scale-110 transition-transform" />}
+                {data.type === 'image' && <Image className="w-16 h-16 text-green-500 group-hover:scale-110 transition-transform" />}
+                {data.type === 'video' && <Film className="w-16 h-16 text-purple-500 group-hover:scale-110 transition-transform" />}
+                {data.type === 'audio' && <Music className="w-16 h-16 text-pink-500 group-hover:scale-110 transition-transform" />}
+                {data.type === 'file' && <FileText className="w-16 h-16 text-gray-500 group-hover:scale-110 transition-transform" />}
+                <span className="text-xs text-center break-words max-w-full text-gray-700 group-hover:text-blue-700">{name}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageViewer({ src }) {
+  return (
+    <div className="flex items-center justify-center h-full bg-gray-900 p-4">
+      <img src={src} alt="Imagem" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+    </div>
+  );
+}
+
+function VideoPlayer({ src }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full bg-black p-8 gap-4">
+      <Film className="w-24 h-24 text-white/50" />
+      <div className="text-white text-center">
+        <div className="text-2xl font-bold mb-2">Player de Vídeo</div>
+        <div className="text-gray-400 mb-4">Reproduzindo vídeo...</div>
+      </div>
+      <img src={src} alt="Video thumbnail" className="w-full max-w-2xl rounded-lg shadow-2xl" />
+      <div className="flex gap-4 mt-4">
+        <button className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg backdrop-blur-sm transition-colors">▶️ Play</button>
+        <button className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg backdrop-blur-sm transition-colors">⏸️ Pause</button>
+        <button className="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg backdrop-blur-sm transition-colors">⏹️ Stop</button>
+      </div>
+    </div>
+  );
+}
+
+function CalculatorReal() {
+  const [display, setDisplay] = useState('0');
+  const [equation, setEquation] = useState('');
+
+  const handleClick = (value) => {
+    if (value === 'C') {
+      setDisplay('0');
+      setEquation('');
+    } else if (value === '=') {
+      try {
+        const result = eval(display);
+        setEquation(display + ' =');
+        setDisplay(result.toString());
+      } catch {
+        setDisplay('Erro');
+      }
+    } else if (value === '⌫') {
+      setDisplay(display.length > 1 ? display.slice(0, -1) : '0');
+    } else {
+      setDisplay(display === '0' ? value : display + value);
+    }
+  };
+
+  const buttons = [
+    ['%', 'CE', 'C', '⌫'],
+    ['1/x', 'x²', '√', '/'],
+    ['7', '8', '9', '*'],
+    ['4', '5', '6', '-'],
+    ['1', '2', '3', '+'],
+    ['±', '0', '.', '=']
+  ];
+
+  return (
+    <div className="p-6 bg-gray-100 h-full flex flex-col">
+      <div className="mb-4">
+        <div className="text-right text-sm text-gray-500 h-6">{equation}</div>
+        <div className="bg-white text-right p-6 rounded-lg text-5xl font-light text-gray-900 border border-gray-300">
+          {display}
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2 flex-1">
+        {buttons.flat().map((btn, i) => (
+          <button
+            key={i}
+            onClick={() => handleClick(btn)}
+            className={`rounded-lg font-semibold text-lg transition-all hover:scale-105 active:scale-95 shadow-sm ${
+              btn === '=' ? 'bg-blue-500 hover:bg-blue-600 text-white col-span-1' :
+              ['/', '*', '-', '+'].includes(btn) ? 'bg-gray-300 hover:bg-gray-400 text-gray-900' :
+              ['%', 'CE', 'C', '⌫', '1/x', 'x²', '√', '±'].includes(btn) ? 'bg-gray-200 hover:bg-gray-300 text-gray-700' :
+              'bg-white hover:bg-gray-50 text-gray-900 border border-gray-300'
+            }`}
+          >
+            {btn}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CalendarApp() {
+  const now = new Date();
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  
+  return (
+    <div className="p-8 bg-gradient-to-br from-blue-50 to-purple-50 h-full">
+      <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-bold text-gray-800">{monthNames[now.getMonth()]} {now.getFullYear()}</h2>
+          <div className="flex gap-2">
+            <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Hoje</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-7 gap-2 mb-2">
+          {days.map(day => (
+            <div key={day} className="text-center font-bold text-gray-600 py-2">{day}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-2">
+          {Array.from({ length: 35 }, (_, i) => (
+            <div 
+              key={i} 
+              className={`aspect-square flex items-center justify-center rounded-lg border transition-colors ${
+                i === now.getDate() + 10 ? 'bg-blue-500 text-white font-bold' : 'bg-gray-50 hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              {i > 0 && i <= 31 ? i : ''}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailApp({ playerName }) {
+  const emails = [
+    { from: 'Equipe Desktop Hunt', subject: 'Bem-vindo ao jogo!', preview: 'Olá! Bem-vindo ao Desktop Hunt...', time: '10:30' },
+    { from: 'Sistema', subject: 'Configuração completa', preview: 'Sua conta foi configurada com sucesso!', time: '09:15' },
+    { from: 'Notificações', subject: 'Nova fase desbloqueada', preview: 'Você desbloqueou a fase 2!', time: '08:45' }
+  ];
+
+  return (
+    <div className="flex h-full">
+      <div className="w-64 bg-gray-50 border-r p-4">
+        <button className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg mb-4 hover:bg-blue-600 transition-colors font-medium">
+          + Nova Mensagem
+        </button>
+        <div className="space-y-1">
+          <button className="w-full text-left px-4 py-2 rounded-lg bg-blue-100 text-blue-700 font-medium">📥 Caixa de Entrada</button>
+          <button className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-700">📤 Enviados</button>
+          <button className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-700">⭐ Favoritos</button>
+          <button className="w-full text-left px-4 py-2 rounded-lg hover:bg-gray-100 text-gray-700">🗑️ Lixeira</button>
+        </div>
+      </div>
+      
+      <div className="flex-1 flex flex-col">
+        <div className="p-4 border-b bg-white">
+          <h2 className="text-2xl font-bold text-gray-800">Caixa de Entrada</h2>
+          <p className="text-sm text-gray-600">{playerName}@desktop.com</p>
+        </div>
+        
+        <div className="flex-1 overflow-auto">
+          {emails.map((email, i) => (
+            <div key={i} className="p-4 border-b hover:bg-gray-50 cursor-pointer transition-colors">
+              <div className="flex items-start justify-between mb-1">
+                <div className="font-bold text-gray-900">{email.from}</div>
+                <div className="text-sm text-gray-500">{email.time}</div>
+              </div>
+              <div className="font-semibold text-gray-800 mb-1">{email.subject}</div>
+              <div className="text-sm text-gray-600">{email.preview}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsWindow({ settings, onClose, onSave, onChangeWallpaper }) {
+  const [tempSettings, setTempSettings] = useState(settings);
+  const [activeTab, setActiveTab] = useState('personalization');
+
+  const wallpapers = [
+    { name: 'Montanhas', url: 'https://images.unsplash.com/photo-1504198453319-5ce911bafcde?w=1920' },
+    { name: 'Céu Estrelado', url: 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920' },
+    { name: 'Paisagem', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920' },
+    { name: 'Oceano', url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920' }
+  ];
+
+  const colors = [
+    { name: 'Azul', value: '#3B82F6' },
+    { name: 'Vermelho', value: '#EF4444' },
+    { name: 'Verde', value: '#10B981' },
+    { name: 'Roxo', value: '#8B5CF6' },
+    { name: 'Rosa', value: '#EC4899' },
+    { name: 'Laranja', value: '#F97316' },
+    { name: 'Amarelo', value: '#EAB308' },
+    { name: 'Ciano', value: '#06B6D4' }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+      <div className="bg-white rounded-2xl shadow-2xl w-[900px] h-[700px] flex flex-col overflow-hidden">
+        <div className="h-14 bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-between px-6 text-white">
+          <div className="flex items-center gap-3">
+            <Settings className="w-6 h-6" />
+            <h2 className="text-xl font-bold">Configurações</h2>
+          </div>
+          <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-lg transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-64 bg-gray-50 border-r p-4 space-y-2">
+            <button 
+              onClick={() => setActiveTab('personalization')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${activeTab === 'personalization' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-700'}`}
+            >
+              <Palette className="w-5 h-5 inline mr-3" />
+              Personalização
+            </button>
+            <button 
+              onClick={() => setActiveTab('account')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${activeTab === 'account' ? 'bg-blue-500 text-white' : 'hover:bg-gray-200 text-gray-700'}`}
+            >
+              <User className="w-5 h-5 inline mr-3" />
+              Conta
+            </button>
+          </div>
+
+          <div className="flex-1 p-8 overflow-auto">
+            {activeTab === 'personalization' && (
+              <div className="space-y-8">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <MousePointer className="w-6 h-6" />
+                    Cor do Cursor
+                  </h3>
+                  <div className="grid grid-cols-4 gap-3">
+                    {colors.map(color => (
+                      <button
+                        key={color.value}
+                        onClick={() => setTempSettings(prev => ({ ...prev, cursorColor: color.value }))}
+                        className={`p-4 rounded-xl border-2 transition-all hover:scale-105 ${tempSettings.cursorColor === color.value ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}
+                      >
+                        <div className="w-12 h-12 rounded-full mx-auto mb-2" style={{ backgroundColor: color.value }}></div>
+                        <div className="text-sm font-medium text-gray-700 text-center">{color.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                    <Image className="w-6 h-6" />
+                    Papel de Parede
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {wallpapers.map(wp => (
+                      <button
+                        key={wp.url}
+                        onClick={() => {
+                          setTempSettings(prev => ({ ...prev, wallpaper: wp.url }));
+                          onChangeWallpaper(wp.url);
+                        }}
+                        className={`relative rounded-xl overflow-hidden border-4 transition-all hover:scale-105 ${tempSettings.wallpaper === wp.url ? 'border-blue-500 shadow-xl' : 'border-gray-200'}`}
+                      >
+                        <img src={wp.url} alt={wp.name} className="w-full h-32 object-cover" />
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm text-white p-2 text-sm font-medium text-center">
+                          {wp.name}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'account' && (
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Nome do Jogador</label>
+                  <input
+                    type="text"
+                    value={tempSettings.playerName}
+                    onChange={(e) => setTempSettings(prev => ({ ...prev, playerName: e.target.value }))}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                    placeholder="Digite seu nome"
+                  />
+                </div>
+
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <div className="text-2xl">ℹ️</div>
+                    <div>
+                      <div className="font-bold text-blue-900 mb-1">Informação</div>
+                      <div className="text-sm text-blue-700">Este nome será exibido para outros jogadores online e no cursor do mouse.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-3">Informações da Conta</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">Email:</span>
+                      <span className="font-medium">{tempSettings.playerName.toLowerCase().replace(/\s/g, '')}@desktop.com</span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b">
+                      <span className="text-gray-600">ID do Jogador:</span>
+                      <span className="font-mono text-xs">{Math.random().toString(36).substr(2, 9)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="h-16 bg-gray-50 border-t flex items-center justify-end gap-3 px-6">
+          <button 
+            onClick={onClose}
+            className="px-6 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-100 transition-colors font-medium text-gray-700"
+          >
+            Cancelar
+          </button>
+          <button 
+            onClick={() => onSave(tempSettings)}
+            className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all font-medium shadow-lg"
+          >
+            Salvar Alterações
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// CSS customizado para scrollbar
+const style = document.createElement('style');
+style.textContent = `
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+`;
+document.head.appendChild(style); 'browser' && <BrowserReal onSearch={checkFoundObject} isOnline={isOnline} />}
+          {win.type === 'notepad' && <Notepad content={win.content} />}
+          {win.type === 'explorer' && (
+            <FileExplorer 
+              path={currentPath} 
+              files={getCurrentFolder()} 
+              onOpen={openFile} 
+              onBack={() => setCurrentPath(prev => prev.slice(0, -1))}
+              onNavigate={(newPath) => setCurrentPath(newPath)}
+            />
+          )}
+        {win.type === 'image' && <ImageViewer src={win.content} />}
+          {win.type === 'video' && <VideoPlayer src={win.content} />}
+          {win.type === 'calculator' && <CalculatorReal />}
+          {win.type === 'calendar' && <CalendarApp />}
+          {win.type === 'email' && <EmailApp playerName={settings.playerName} />}
+        </Window>
+      ))}
+    </div>
+  );
+}
